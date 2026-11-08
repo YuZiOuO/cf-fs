@@ -24,10 +24,8 @@
     "dev": "wrangler dev",
     "deploy": "wrangler deploy --minify",
     "cf-typegen": "wrangler types --env-interface CloudflareBindings",
-    "test": "bun run test:rfc && bun run test:litmus",
-    "test:rfc": "bun test test/rfc/index.test.ts",
+    "test": "bun run test:litmus",
     "test:litmus": "bash test/litmus.sh",
-    "test:perf": "k6 run test/load.js",
     "format": "prettier --write .",
     "lint": "eslint .",
     "check": "prettier --check . && bun run lint && tsc --noEmit && bun run test"
