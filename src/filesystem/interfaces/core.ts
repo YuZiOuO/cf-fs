@@ -1,5 +1,3 @@
-import type { ByteRange } from "./object_store";
-
 declare const nodeIdType: unique symbol;
 
 /**
@@ -35,6 +33,11 @@ export type Node = FileNode | DirectoryNode;
 export interface DirectoryEntry {
   name: string;
   node: Node;
+}
+
+export interface ByteRange {
+  start: number;
+  end?: number;
 }
 
 export interface FileContent {

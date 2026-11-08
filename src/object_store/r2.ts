@@ -1,4 +1,4 @@
-import type { ObjectKey, ObjectStore } from "../../interfaces";
+import { ObjectKey, ObjectStore } from "./interface";
 
 export class R2ObjectStore implements ObjectStore {
   constructor(private readonly bucket: R2Bucket) {}

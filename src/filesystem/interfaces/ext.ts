@@ -1,4 +1,4 @@
-import type { NodeId, Path } from "./fs";
+import type { NodeId, Path } from "./core";
 
 /** Storage quota for a filesystem path. */
 export interface StorageQuota {
