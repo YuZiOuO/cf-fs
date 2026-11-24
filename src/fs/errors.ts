@@ -26,8 +26,3 @@ export class IsDirectoryError extends FsError {}
 export class DirectoryNotEmptyError extends FsError {}
 /** 内部错误：非预期的系统级失败 */
 export class InternalError extends FsError {}
-
-/** 内部错误：锁竞争，不抛给用户 */
-export class LockedError extends FsError {}
-/** 内部错误：未持锁 */
-export class NotLockedError extends FsError {}

@@ -11,6 +11,10 @@
       "type": "durable-object",
       "storage": "sqlite",
     },
+    "LockServiceState": {
+      "type": "durable-object",
+      "storage": "sqlite",
+    },
     "default": {
       "type": "worker",
       "cache": {
@@ -35,6 +39,10 @@
       {
         "name": "FileSystemState",
         "class_name": "FileSystemState",
+      },
+      {
+        "name": "LockServiceState",
+        "class_name": "LockServiceState",
       },
     ],
   },

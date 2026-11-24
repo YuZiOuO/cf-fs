@@ -47,8 +47,6 @@ export interface SuperBlock {
     createInode<K extends Inode["kind"]>(kind: K, permission: Permission): Promise<Extract<Inode, { kind: K }>>;
     getInode(i: InodeIndex): Promise<Inode>;
     writeInode(i: Inode): Promise<void>;
-    lock(index: InodeIndex, owner: string): Promise<void>;
-    unlock(index: InodeIndex, owner: string): Promise<void>;
 }
 
 export interface VirtualFileSystem {
