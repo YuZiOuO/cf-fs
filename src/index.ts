@@ -82,7 +82,7 @@ gateway.all("*", async (c) => {
   return response;
 });
 
-export { FileSystemState } from "./filesystem";
+export { FileSystemState } from "./fs/durable-object";
 
 // The default Worker is the only public HTTP entry point.
 export default {
