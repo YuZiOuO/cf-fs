@@ -1,5 +1,9 @@
+import type { IVirtualFileSystem } from "../../fs";
+
 /** A decoded absolute URL path used inside the WebDAV implementation. */
 export type Path = string;
+
+export type UserOperations = IVirtualFileSystem["userOperations"];
 
 /** An XML expanded name: namespace URI plus local name. */
 export interface PropertyName {
@@ -19,7 +23,7 @@ export type LockDepth = "0" | "infinity";
 
 export interface ByteRange {
   start: number;
-  end?: number;
+  end: number;
 }
 
 export interface FileInfo {

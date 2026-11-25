@@ -1,8 +1,6 @@
 import { basename } from "node:path/posix";
-import type { XAttrProvider } from "../../interfaces";
-import { FileSystemError } from "../../filesystem";
 import type { Resource } from "../core/resource";
-import type { ResourceInfo } from "../core/types";
+import type { ResourceInfo, UserOperations } from "../core/types";
 import type {
   PropfindRequest,
   Property,
@@ -41,16 +39,14 @@ interface StoredProperty {
 export const propertyKey = ({ namespaceURI, localName }: PropertyName) =>
   `${namespaceURI}\0${localName}`;
 
-const XATTR_PREFIX = "user.webdav.property.";
-const encoder = new TextEncoder();
-const decoder = new TextDecoder();
+export const propertyXattrPrefix = "user.webdav.property.";
 
 const propertyXattrName = ({ namespaceURI, localName }: PropertyName) =>
-  `${XATTR_PREFIX}${encodeURIComponent(namespaceURI)}:${encodeURIComponent(localName)}`;
+  `${propertyXattrPrefix}${encodeURIComponent(namespaceURI)}:${encodeURIComponent(localName)}`;
 
 const propertyNameFromXattr = (name: string): PropertyName | undefined => {
-  if (!name.startsWith(XATTR_PREFIX)) return undefined;
-  const encoded = name.slice(XATTR_PREFIX.length);
+  if (!name.startsWith(propertyXattrPrefix)) return undefined;
+  const encoded = name.slice(propertyXattrPrefix.length);
   const separator = encoded.indexOf(":");
   if (separator < 0) return undefined;
   try {
@@ -80,7 +76,7 @@ const instructionProperty = (instruction: ProppatchInstruction) =>
 
 export class Properties {
   constructor(
-    private readonly xattrs: XAttrProvider,
+    private readonly fs: UserOperations,
     private readonly extraProtected: readonly PropertyName[] = [],
   ) {}
 
@@ -90,27 +86,12 @@ export class Properties {
     const stored: Record<string, readonly StoredProperty[]> = {};
     await Promise.all(
       items.map(async ({ resource }) => {
-        const node = await resource.node();
-        if (!node) {
-          stored[resource.path] = [];
-          return;
-        }
-        const names = (await this.xattrs.listXattrs(node.id))
-          .map((name) => ({ name, property: propertyNameFromXattr(name) }))
-          .filter(
-            (entry): entry is { name: string; property: PropertyName } =>
-              entry.property !== undefined,
-          );
-        const properties = await Promise.all(
-          names.map(async ({ name, property }) => {
-            const value = await this.xattrs.getXattr(node.id, name);
-            return value
-              ? { ...property, xml: decoder.decode(value) }
-              : undefined;
-          }),
-        );
-        stored[resource.path] = properties.filter(
-          (value): value is StoredProperty => value !== undefined,
+        const xattrs = await this.fs.listXAttrs(resource.path);
+        stored[resource.path] = Object.entries(xattrs).flatMap(
+          ([name, xml]) => {
+            const property = propertyNameFromXattr(name);
+            return property && xml ? [{ ...property, xml }] : [];
+          },
         );
       }),
     );
@@ -293,22 +274,19 @@ export class Properties {
       }));
     }
 
-    const node = await resource.node();
-    if (!node) throw new FileSystemError("not-found", "Resource not found");
-    const changes = instructions.map((instruction) => {
-      if (instruction.kind !== "set")
-        return {
-          kind: "remove" as const,
-          name: propertyXattrName(instruction.name),
-        };
-      const name = propertyName(instruction.property.element);
-      return {
-        kind: "set" as const,
-        name: propertyXattrName(name),
-        value: encoder.encode(serializeProperty(instruction.property)),
-      };
-    });
-    await this.xattrs.patchXattrs(node.id, changes);
+    for (const instruction of instructions) {
+      const name =
+        instruction.kind === "set"
+          ? propertyName(instruction.property.element)
+          : instruction.name;
+      await this.fs.setXAttr(
+        resource.path,
+        propertyXattrName(name),
+        instruction.kind === "set"
+          ? serializeProperty(instruction.property)
+          : "",
+      );
+    }
     return instructions.map((instruction) => ({
       properties: [instructionProperty(instruction)],
       status: 200,

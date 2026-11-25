@@ -1,8 +1,8 @@
 export class FsError extends Error {
-    constructor(message: string) {
-        super(message);
-        this.name = new.target.name;
-    }
+  constructor(message: string) {
+    super(message);
+    this.name = new.target.name;
+  }
 }
 
 /** 业务错误：路径不存在 */
@@ -19,12 +19,12 @@ export class DirectoryNotEmptyError extends FsError {}
 export class InternalError extends FsError {}
 
 const classes = [
-    NotFoundError,
-    AlreadyExistsError,
-    NotDirectoryError,
-    IsDirectoryError,
-    DirectoryNotEmptyError,
-    InternalError,
+  NotFoundError,
+  AlreadyExistsError,
+  NotDirectoryError,
+  IsDirectoryError,
+  DirectoryNotEmptyError,
+  InternalError,
 ];
 
 /**
@@ -32,10 +32,10 @@ const classes = [
  * 按 name 重建为本地类实例，使 instanceof 恢复可用。
  */
 export function rethrow(err: unknown): never {
-    if (err instanceof Error) {
-        for (const cls of classes) {
-            if (err.name === cls.name) throw new cls(err.message);
-        }
+  if (err instanceof Error) {
+    for (const cls of classes) {
+      if (err.name === cls.name) throw new cls(err.message);
     }
-    throw err;
+  }
+  throw err;
 }

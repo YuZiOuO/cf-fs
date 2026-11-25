@@ -40,7 +40,6 @@ export type IfHeader = readonly IfList[];
 export type LockToken = string & { readonly __lockToken: unique symbol };
 export interface Lock {
   token: LockToken;
-  root: Path;
   scope: LockScope;
   depth: LockDepth;
   timeout?: number | "infinite";

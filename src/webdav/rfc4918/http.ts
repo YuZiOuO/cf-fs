@@ -111,25 +111,21 @@ export const ifHeaderMatches = async (
   header: IfHeader,
   requestPath: Path,
   contextFor: (path: Path) => Promise<IfMatchContext>,
-  stateTokenMatches: (token: string, path: Path) => Promise<boolean> = () =>
-    Promise.resolve(false),
 ) => {
   for (const list of header) {
     const resource = list.resource ?? requestPath;
     const context = await contextFor(resource);
     if (
-      await Promise.all(
-        list.conditions.map(async (condition) => {
+      list.conditions
+        .map((condition) => {
           const matches =
             condition.kind === "entity-tag"
               ? context.etag === condition.etag
-              : condition.token === "DAV:no-lock"
-                ? false
-                : context.lockTokens.has(condition.token) ||
-                  (await stateTokenMatches(condition.token, resource));
+              : condition.token !== "DAV:no-lock" &&
+                context.lockTokens.has(condition.token);
           return condition.not ? !matches : matches;
-        }),
-      ).then((matches) => matches.every(Boolean))
+        })
+        .every(Boolean)
     )
       return true;
   }

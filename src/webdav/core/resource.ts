@@ -1,36 +1,58 @@
 import { dirname, join } from "node:path/posix";
-import type { FileSystem, Node as FileSystemNode } from "../../interfaces";
+import { NotFoundError } from "../../fs";
+import type { Stat } from "../../fs";
 import type {
   ByteRange,
   EntityTag,
-  FileInfo,
   Path,
   ResourceInfo,
+  UserOperations,
 } from "./types";
 
-export const toResourceInfo = (node: FileSystemNode): ResourceInfo =>
-  node.kind === "file"
+export const toResourceInfo = (stat: Stat): ResourceInfo =>
+  stat.kind === "file"
     ? {
         kind: "file",
-        lastModified: node.lastModified,
-        contentLength: node.size,
+        lastModified: new Date(stat.modifiedTime),
+        contentLength: stat.size,
       }
     : {
         kind: "collection",
-        lastModified: node.lastModified,
+        lastModified: new Date(stat.modifiedTime),
       };
 
 export type ResourceFactory = (path: Path) => Resource;
+
+const slice = (
+  body: ReadableStream<Uint8Array>,
+  start: number,
+  length: number,
+) => {
+  const end = start + length;
+  let position = 0;
+  return body.pipeThrough(
+    new TransformStream<Uint8Array, Uint8Array>({
+      transform(chunk, controller) {
+        const chunkEnd = position + chunk.length;
+        const from = Math.max(start - position, 0);
+        const to = Math.min(chunkEnd, end) - position;
+        if (to > from) controller.enqueue(chunk.subarray(from, to));
+        position = chunkEnd;
+        if (position >= end) controller.terminate();
+      },
+    }),
+  );
+};
 
 /** A path-bound WebDAV resource. */
 export class Resource {
   constructor(
     readonly path: Path,
-    private readonly filesystem: FileSystem,
+    readonly fs: UserOperations,
   ) {}
 
   resolve(path: Path) {
-    return new Resource(path, this.filesystem);
+    return new Resource(path, this.fs);
   }
 
   parent(): Resource | undefined {
@@ -39,81 +61,65 @@ export class Resource {
   }
 
   async stat(): Promise<ResourceInfo | undefined> {
-    const node = await this.node();
-    return node ? toResourceInfo(node) : undefined;
-  }
-
-  async node(): Promise<FileSystemNode | undefined> {
-    return this.filesystem.stat(this.path);
+    try {
+      return toResourceInfo(await this.fs.stat(this.path));
+    } catch (error) {
+      if (error instanceof NotFoundError) return undefined;
+      throw error;
+    }
   }
 
   async etag(): Promise<EntityTag> {
-    const node = await this.node();
-    if (!node) throw new Error("Resource not found");
-    return `"${node.id}-${node.lastModified.getTime()}"` as EntityTag;
+    const stat = await this.fs.stat(this.path);
+    return `"${stat.size}-${stat.modifiedTime}"` as EntityTag;
   }
 
-  async readFile(range?: ByteRange) {
-    const {
-      file,
-      body,
-      range: readRange,
-    } = await this.filesystem.readFile(
-      this.path,
-      range ? { range } : undefined,
-    );
-    return {
-      file: toResourceInfo(file) as FileInfo,
-      body,
-      ...(readRange ? { range: readRange } : {}),
-    };
+  async readFile(range?: ByteRange): Promise<ReadableStream<Uint8Array>> {
+    const body = await this.fs.read(this.path);
+    return range ? slice(body, range.start, range.end - range.start + 1) : body;
   }
 
   async *children(): AsyncIterable<{
     resource: Resource;
     info: ResourceInfo;
   }> {
-    for await (const member of this.filesystem.readdir(this.path)) {
-      yield {
-        resource: this.resolve(join(this.path, member.name)),
-        info: toResourceInfo(member.node),
-      };
-    }
+    const children = await Promise.all(
+      (await this.fs.list(this.path)).map(async (name) => {
+        const path = join(this.path, name);
+        return {
+          resource: this.resolve(path),
+          info: toResourceInfo(await this.fs.stat(path)),
+        };
+      }),
+    );
+    yield* children;
   }
 
-  async writeFile(body: ReadableStream<Uint8Array>): Promise<EntityTag> {
-    const node = await this.filesystem.writeFile(this.path, body);
-    return `"${node.id}-${node.lastModified.getTime()}"` as EntityTag;
+  async writeFile(
+    body: ReadableStream<Uint8Array> | Uint8Array,
+  ): Promise<EntityTag> {
+    await this.fs.write(
+      this.path,
+      body instanceof Uint8Array ? new Response(body).body! : body,
+    );
+    return this.etag();
   }
 
   async createCollection(): Promise<EntityTag> {
-    const node = await this.filesystem.mkdir(this.path);
-    return `"${node.id}-${node.lastModified.getTime()}"` as EntityTag;
+    await this.fs.mkdir(this.path);
+    return this.etag();
   }
 
   async delete(): Promise<void> {
-    await this.filesystem.remove(this.path, { recursive: true });
+    const info = await this.stat();
+    if (info?.kind === "collection") {
+      for (const name of await this.fs.list(this.path))
+        await this.resolve(join(this.path, name)).delete();
+    }
+    await this.fs.remove(this.path);
   }
 
-  async copyTo(
-    destination: Resource,
-    options: { depth: "0" | "infinity"; overwrite: boolean },
-  ): Promise<ResourceInfo> {
-    const recursive = options.depth === "infinity";
-    const resource = await this.filesystem.copy(this.path, destination.path, {
-      recursive,
-      overwrite: options.overwrite,
-    });
-    return toResourceInfo(resource);
-  }
-
-  async moveTo(
-    destination: Resource,
-    overwrite: boolean,
-  ): Promise<ResourceInfo> {
-    const resource = await this.filesystem.move(this.path, destination.path, {
-      overwrite,
-    });
-    return toResourceInfo(resource);
+  async moveTo(destination: Resource): Promise<void> {
+    await this.fs.move(this.path, destination.path);
   }
 }
