@@ -82,8 +82,8 @@ gateway.all("*", async (c) => {
   return response;
 });
 
-export { FileSystemState } from "./filesystem";
-export { WebDavState } from "./webdav";
+export { R2SuperBlockState as FileSystemState } from "./fs/r2-superblock";
+export { LockServiceState } from "./fs/vfs";
 
 // The default Worker is the only public HTTP entry point.
 export default {

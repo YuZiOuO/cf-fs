@@ -1,14 +1,13 @@
 import { normalize } from "node:path/posix";
-import type { Path } from "./interfaces";
 
-export const decodePath = (pathname: string): Path => {
+export const decodePath = (pathname: string): string => {
   const decodedPath = decodeURIComponent(pathname);
   if (decodedPath.includes("\0") || decodedPath.split("/").includes(".."))
     throw new Error("Invalid path");
   return normalize(`/${decodedPath}`).replace(/\/+$/, "") || "/";
 };
 
-export const toHref = (path: Path, directory = false) =>
+export const toHref = (path: string, directory = false) =>
   path === "/"
     ? "/"
     : `/${path

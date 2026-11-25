@@ -11,7 +11,7 @@
       "type": "durable-object",
       "storage": "sqlite",
     },
-    "WebDavState": {
+    "LockServiceState": {
       "type": "durable-object",
       "storage": "sqlite",
     },
@@ -41,8 +41,8 @@
         "class_name": "FileSystemState",
       },
       {
-        "name": "WebDavState",
-        "class_name": "WebDavState",
+        "name": "LockServiceState",
+        "class_name": "LockServiceState",
       },
     ],
   },
