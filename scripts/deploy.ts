@@ -12,8 +12,8 @@ import {
   text,
 } from "@clack/prompts";
 import { execa } from "execa";
-import { fileURLToPath } from "node:url";
 import { readFile, writeFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 
 const configPath = "wrangler.jsonc";
 const defaults = {
@@ -52,39 +52,17 @@ const authenticate = async () => {
   }
 };
 
-const requiredText = async (message: string, initialValue: string) => {
-  const value = await text({ message, initialValue });
-  if (isCancel(value)) {
+const destroy = async () => {
+  intro("cf-fs destruction");
+  const workerNameValue = await text({
+    message: "Worker name",
+    initialValue: "",
+  });
+  if (isCancel(workerNameValue)) {
     cancel("操作已取消 / Operation cancelled.");
     process.exit(0);
   }
-  return value.trim();
-};
-
-const replaceConfigValue = (config: string, key: string, value: string) => {
-  const pattern = new RegExp(`(\\"${key}\\"\\s*:\\s*)\\"[^\\"]*\\"`);
-  if (!pattern.test(config))
-    throw new Error(`Unable to find ${key} in ${configPath}`);
-  return config.replace(pattern, `$1${JSON.stringify(value)}`);
-};
-
-const confirmAction = async (message: string) => {
-  const answer = await confirm({
-    message,
-    active: "Delete",
-    inactive: "Keep",
-    initialValue: false,
-  });
-  if (isCancel(answer)) {
-    cancel("Destruction cancelled.");
-    return false;
-  }
-  return answer;
-};
-
-const destroy = async () => {
-  intro("cf-fs destruction");
-  const workerName = await requiredText("Worker name", "");
+  const workerName = workerNameValue.trim();
   let bucketName: string | undefined;
   try {
     const versions = JSON.parse(
@@ -120,7 +98,13 @@ const destroy = async () => {
   }
 
   log.error(`Danger: deleting Worker ${workerName} cannot be undone.`);
-  if (!(await confirmAction(`Delete Worker ${workerName}?`))) {
+  const deleteWorker = await confirm({
+    message: `Delete Worker ${workerName}?`,
+    active: "Delete",
+    inactive: "Keep",
+    initialValue: false,
+  });
+  if (isCancel(deleteWorker) || !deleteWorker) {
     outro("Destruction cancelled.");
     return;
   }
@@ -137,11 +121,13 @@ const destroy = async () => {
   log.error(
     `Danger: deleting R2 bucket ${bucketName} permanently deletes all stored objects.`,
   );
-  if (
-    !(await confirmAction(
-      `Delete R2 bucket ${bucketName} and all objects in it?`,
-    ))
-  ) {
+  const deleteBucket = await confirm({
+    message: `Delete R2 bucket ${bucketName} and all objects in it?`,
+    active: "Delete",
+    inactive: "Keep",
+    initialValue: false,
+  });
+  if (isCancel(deleteBucket) || !deleteBucket) {
     outro(`Worker deleted. R2 bucket ${bucketName} was kept.`);
     return;
   }
@@ -167,11 +153,20 @@ const main = async () => {
 
   intro("部署 cf-fs / Deploy cf-fs");
   await authenticate();
-  const config = await readFile(configPath, "utf8").catch(() => "");
-  const workerName = await requiredText(
-    "请输入 Worker 名称 / Enter the Worker name",
-    config.match(/"name"\s*:\s*"([^"]+)"/)?.[1] ?? defaults.workerName,
+  const config = await readFile(
+    fileURLToPath(new URL("../wrangler.jsonc", import.meta.url).href),
+    "utf8",
   );
+  const workerNameValue = await text({
+    message: "请输入 Worker 名称 / Enter the Worker name",
+    initialValue:
+      config.match(/"name"\s*:\s*"([^"]+)"/)?.[1] ?? defaults.workerName,
+  });
+  if (isCancel(workerNameValue)) {
+    cancel("操作已取消 / Operation cancelled.");
+    process.exit(0);
+  }
+  const workerName = workerNameValue.trim();
   try {
     const versions = JSON.parse(
       (await runWrangler(["versions", "list", "--name", workerName, "--json"]))
@@ -182,21 +177,32 @@ const main = async () => {
         `Worker ${workerName} 已存在 / Worker ${workerName} already exists.`,
       );
       outro(
-        "请使用 destroy 命令清理后再部署 / Run bun run destroy:interactive before deploying again.",
+        "请使用 destroy 命令清理后再部署 / Run bunx cf-fs destroy before deploying again.",
       );
       return;
     }
   } catch {
     // Wrangler reports a missing Worker as a failed versions query.
   }
-  const bucketName = await requiredText(
-    "请输入 R2 bucket 名称 / Enter the R2 bucket name",
-    config.match(/"bucket_name"\s*:\s*"([^"]+)"/)?.[1] ?? defaults.bucketName,
-  );
-  const username = await requiredText(
-    "请输入 WebDAV 用户名 / Enter the WebDAV username",
-    defaults.username,
-  );
+  const bucketNameValue = await text({
+    message: "请输入 R2 bucket 名称 / Enter the R2 bucket name",
+    initialValue:
+      config.match(/"bucket_name"\s*:\s*"([^"]+)"/)?.[1] ?? defaults.bucketName,
+  });
+  if (isCancel(bucketNameValue)) {
+    cancel("操作已取消 / Operation cancelled.");
+    process.exit(0);
+  }
+  const bucketName = bucketNameValue.trim();
+  const usernameValue = await text({
+    message: "请输入 WebDAV 用户名 / Enter the WebDAV username",
+    initialValue: defaults.username,
+  });
+  if (isCancel(usernameValue)) {
+    cancel("操作已取消 / Operation cancelled.");
+    process.exit(0);
+  }
+  const username = usernameValue.trim();
   const passwordValue = await password({
     message: "请输入 WebDAV 密码 / Enter the WebDAV password",
     validate: (value) =>
@@ -207,30 +213,16 @@ const main = async () => {
     return;
   }
 
-  const updatedConfig = config
-    ? replaceConfigValue(
-        replaceConfigValue(config, "name", workerName),
-        "bucket_name",
-        bucketName,
-      )
-    : `${JSON.stringify(
-        {
-          name: workerName,
-          main: fileURLToPath(
-            String(new URL("../src/index.ts", import.meta.url)),
-          ),
-          compatibility_date: "2026-07-27",
-          compatibility_flags: ["nodejs_compat"],
-          r2_buckets: [{ binding: "BUCKET", bucket_name: bucketName }],
-          durable_objects: {
-            bindings: [
-              { name: "FileSystemState", class_name: "FileSystemState" },
-            ],
-          },
-        },
-        null,
-        2,
-      )}\n`;
+  const updatedConfig = [
+    ["name", workerName],
+    ["bucket_name", bucketName],
+    ["main", fileURLToPath(new URL("../src/index.ts", import.meta.url).href)],
+  ].reduce((result, [key, value]) => {
+    const pattern = new RegExp(`(\\"${key}\\"\\s*:\\s*)\\"[^\\"]*\\"`);
+    if (!pattern.test(result))
+      throw new Error(`Unable to find ${key} in ${configPath}`);
+    return result.replace(pattern, `$1${JSON.stringify(value)}`);
+  }, config);
   await writeFile(configPath, updatedConfig);
 
   const storage = spinner();
@@ -267,6 +259,8 @@ const main = async () => {
   deployment.start("正在部署 Worker / Deploying Worker");
   const deployed = await runWrangler([
     "deploy",
+    "--config",
+    configPath,
     "--name",
     workerName,
     "--minify",
