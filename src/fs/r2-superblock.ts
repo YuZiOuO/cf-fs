@@ -1,6 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
 import type { Inode, SuperBlock as ISuperBlock } from "./interface";
-import { AlreadyExistsError, NotFoundError, rethrow } from "./errors";
+import { AlreadyExistsError, InternalError, NotFoundError, rethrow } from "./errors";
 import { Permission } from "unix-permissions";
 
 const ROOT_INDEX = 0;
@@ -178,11 +178,13 @@ export class R2SuperBlock implements ISuperBlock {
                 AddressSpaceOperations: {
                     read: async () => {
                         const obj = await this.bucket.get(key);
-                        if (!obj) return new Uint8Array(0);
-                        return new Uint8Array(await obj.arrayBuffer());
+                        if (!obj) return new Response().body!;
+                        return obj.body;
                     },
-                    put: async (data: Uint8Array) => {
-                        await this.bucket.put(key, data);
+                    put: async (data: ReadableStream<Uint8Array>) => {
+                        const obj = await this.bucket.put(key, data);
+                        if (!obj) throw new InternalError(`failed to write ${key}`);
+                        return obj.size;
                     },
                 },
             };

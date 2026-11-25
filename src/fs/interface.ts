@@ -19,8 +19,8 @@ export type InodeBase = {
 export interface FileInode extends InodeBase {
     readonly kind: "file";
     AddressSpaceOperations: {
-        read(): Promise<Uint8Array>;
-        put(data: Uint8Array): Promise<void>;
+        read(): Promise<ReadableStream<Uint8Array>>;
+        put(data: ReadableStream<Uint8Array>): Promise<number>;
     };
 }
 
@@ -54,8 +54,8 @@ export interface VirtualFileSystem {
     unregister_filesystem(b: SuperBlock): void;
 
     userOperations: {
-        write(path: Dentry, data: Uint8Array): Promise<void>;
-        read(path: Dentry): Promise<Uint8Array>;
+        write(path: Dentry, data: ReadableStream<Uint8Array>): Promise<void>;
+        read(path: Dentry): Promise<ReadableStream<Uint8Array>>;
         mkdir(path: Dentry): Promise<void>;
         remove(path: Dentry): Promise<void>;
         move(from: Dentry, to: Dentry): Promise<void>;

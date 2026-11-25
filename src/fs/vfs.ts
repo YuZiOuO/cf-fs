@@ -94,7 +94,7 @@ export class VirtualFileSystem implements IVirtualFileSystem {
     }
 
     userOperations = {
-        write: async (path: Dentry, data: Uint8Array): Promise<void> => {
+        write: async (path: Dentry, data: ReadableStream<Uint8Array>): Promise<void> => {
             const sb = this.superBlock();
             const { parent, name } = await this.resolveParent(path);
             const owner = crypto.randomUUID();
@@ -106,8 +106,7 @@ export class VirtualFileSystem implements IVirtualFileSystem {
                     try {
                         const inode = await sb.getInode(existing);
                         if (inode.kind !== "file") throw new IsDirectoryError(path);
-                        await inode.AddressSpaceOperations.put(data);
-                        inode.size = data.length;
+                        inode.size = await inode.AddressSpaceOperations.put(data);
                         inode.modifiedTime = this.now();
                         await sb.writeInode(inode);
                     } finally {
@@ -116,8 +115,7 @@ export class VirtualFileSystem implements IVirtualFileSystem {
                     return;
                 }
                 const created = await sb.createInode("file", "rw-r--r--");
-                await created.AddressSpaceOperations.put(data);
-                created.size = data.length;
+                created.size = await created.AddressSpaceOperations.put(data);
                 await sb.writeInode(created);
                 parent.namespaceOperations.create(name, created.index);
                 parent.modifiedTime = this.now();
@@ -127,7 +125,7 @@ export class VirtualFileSystem implements IVirtualFileSystem {
             }
         },
 
-        read: async (path: Dentry): Promise<Uint8Array> => {
+        read: async (path: Dentry): Promise<ReadableStream<Uint8Array>> => {
             const inode = await this.resolve(path);
             if (inode.kind !== "file") throw new IsDirectoryError(path);
             return inode.AddressSpaceOperations.read();
