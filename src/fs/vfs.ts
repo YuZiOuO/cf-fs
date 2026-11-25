@@ -15,6 +15,7 @@ import {
     IsDirectoryError,
     NotDirectoryError,
     NotFoundError,
+    rethrow,
 } from "./errors";
 
 type Dentry = string;
@@ -75,13 +76,21 @@ export class VirtualFileSystem implements IVirtualFileSystem {
     }
 
     private async lock(index: InodeIndex, owner: string): Promise<void> {
-        while (!(await this.locks.tryLock(index, owner))) {
-            await new Promise((resolve) => setTimeout(resolve, 100));
+        try {
+            while (!(await this.locks.tryLock(index, owner))) {
+                await new Promise((resolve) => setTimeout(resolve, 100));
+            }
+        } catch (err) {
+            rethrow(err);
         }
     }
 
     private async unlock(index: InodeIndex, owner: string): Promise<void> {
-        await this.unlock(index, owner);
+        try {
+            await this.locks.unlock(index, owner);
+        } catch (err) {
+            rethrow(err);
+        }
     }
 
     userOperations = {

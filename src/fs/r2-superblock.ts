@@ -1,6 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
 import type { Inode, SuperBlock as ISuperBlock } from "./interface";
-import { AlreadyExistsError, NotFoundError } from "./errors";
+import { AlreadyExistsError, NotFoundError, rethrow } from "./errors";
 import { Permission } from "unix-permissions";
 
 const ROOT_INDEX = 0;
@@ -116,27 +116,39 @@ export class R2SuperBlock implements ISuperBlock {
         kind: K,
         permission: Permission,
     ): Promise<Extract<Inode, { kind: K }>> {
-        const record = await this.state.allocate(kind, permission);
-        return this.materialize(record) as Extract<Inode, { kind: K }>;
+        try {
+            const record = await this.state.allocate(kind, permission);
+            return this.materialize(record) as Extract<Inode, { kind: K }>;
+        } catch (err) {
+            rethrow(err);
+        }
     }
 
     async getInode(i: number): Promise<Inode> {
-        const record = await this.state.get(i);
-        if (!record) throw new NotFoundError(`inode ${i}`);
-        return this.materialize(record);
+        try {
+            const record = await this.state.get(i);
+            if (!record) throw new NotFoundError(`inode ${i}`);
+            return this.materialize(record);
+        } catch (err) {
+            rethrow(err);
+        }
     }
 
     async writeInode(i: Inode): Promise<void> {
-        await this.state.write({
-            idx: i.index,
-            kind: i.kind,
-            size: i.size,
-            permission: i.permission,
-            accessTime: i.accessTime,
-            modifiedTime: i.modifiedTime,
-            xattrs: JSON.stringify(Object.fromEntries(i.inodeOperations.listXAttr())),
-            namespace: i.kind === "dir" ? JSON.stringify(Object.fromEntries(i.namespace)) : null,
-        });
+        try {
+            await this.state.write({
+                idx: i.index,
+                kind: i.kind,
+                size: i.size,
+                permission: i.permission,
+                accessTime: i.accessTime,
+                modifiedTime: i.modifiedTime,
+                xattrs: JSON.stringify(Object.fromEntries(i.inodeOperations.listXAttr())),
+                namespace: i.kind === "dir" ? JSON.stringify(Object.fromEntries(i.namespace)) : null,
+            });
+        } catch (err) {
+            rethrow(err);
+        }
     }
 
     private materialize(record: InodeRow): Inode {

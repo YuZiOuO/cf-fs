@@ -5,15 +5,6 @@ export class FsError extends Error {
     }
 }
 
-/**
- * RPC 安全的错误判定。
- * Cloudflare DO RPC 跨边界序列化会丢失原型链，instanceof 不可靠；
- * 但 name 属性会被保留（构造函数里 new.target.name），所以用 name 匹配。
- */
-export function isError(err: unknown, cls: new (...args: never[]) => FsError): boolean {
-    return err instanceof Error && err.name === cls.name;
-}
-
 /** 业务错误：路径不存在 */
 export class NotFoundError extends FsError {}
 /** 业务错误：目标已存在 */
@@ -26,3 +17,25 @@ export class IsDirectoryError extends FsError {}
 export class DirectoryNotEmptyError extends FsError {}
 /** 内部错误：非预期的系统级失败 */
 export class InternalError extends FsError {}
+
+const classes = [
+    NotFoundError,
+    AlreadyExistsError,
+    NotDirectoryError,
+    IsDirectoryError,
+    DirectoryNotEmptyError,
+    InternalError,
+];
+
+/**
+ * Cloudflare RPC 跨边界序列化丢失原型链，instanceof 不可靠，但 name 保留。
+ * 按 name 重建为本地类实例，使 instanceof 恢复可用。
+ */
+export function rethrow(err: unknown): never {
+    if (err instanceof Error) {
+        for (const cls of classes) {
+            if (err.name === cls.name) throw new cls(err.message);
+        }
+    }
+    throw err;
+}
