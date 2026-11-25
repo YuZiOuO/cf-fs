@@ -18,7 +18,7 @@ export type InodeBase = {
 
 export interface FileInode extends InodeBase {
   readonly kind: "file";
-  AddressSpaceOperations: {
+  addressSpaceOperations: {
     read(): Promise<ReadableStream<Uint8Array>>;
     put(data: ReadableStream<Uint8Array>): Promise<number>;
   };
@@ -49,7 +49,7 @@ export interface SuperBlock {
     permission: Permission,
   ): Promise<Extract<Inode, { kind: K }>>;
   /**
-   * Does **NOT** guarantee returning same object when calling with same InodeInde.
+   * Does **NOT** guarantee returning same object when calling with same InodeIndex.
    * This is by design because maintaining a consistent global inode map may be costly.
    */
   getInode(i: InodeIndex): Promise<Inode>;

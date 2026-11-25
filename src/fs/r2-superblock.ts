@@ -225,7 +225,7 @@ export class R2SuperBlock implements ISuperBlock {
       return {
         ...base,
         kind: "file",
-        AddressSpaceOperations: {
+        addressSpaceOperations: {
           read: async () => {
             const obj = await this.bucket.get(key);
             if (!obj) return new Response().body!;
