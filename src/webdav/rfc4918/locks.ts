@@ -97,19 +97,24 @@ export class Locks {
     token: LockToken,
     timeout?: Lock["timeout"],
   ): Promise<Lock | null> {
-    const locks = await this.read(path);
-    const index = locks.findIndex((lock) => lock.token === token);
-    if (index < 0) return null;
-    const updated: StoredLock = {
-      ...locks[index],
-      expiresAt:
-        timeout === undefined || timeout === "infinite"
-          ? null
-          : Date.now() + timeout * 1000,
-    };
-    locks[index] = updated;
-    await this.fs.setXAttr(path, LOCK_XATTR, JSON.stringify(locks));
-    return toLock(updated);
+    for (const ancestor of ancestors(path)) {
+      const locks = await this.read(ancestor);
+      const index = locks.findIndex((lock) => lock.token === token);
+      if (index < 0) continue;
+      const lock = locks[index];
+      if (ancestor !== path && lock.depth !== "infinity") continue;
+      const updated: StoredLock = {
+        ...lock,
+        expiresAt:
+          timeout === undefined || timeout === "infinite"
+            ? null
+            : Date.now() + timeout * 1000,
+      };
+      locks[index] = updated;
+      await this.fs.setXAttr(ancestor, LOCK_XATTR, JSON.stringify(locks));
+      return toLock(updated);
+    }
+    return null;
   }
 
   async unlock(path: Path, token: LockToken): Promise<void> {

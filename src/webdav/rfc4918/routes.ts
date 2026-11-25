@@ -347,7 +347,13 @@ rfc4918.on("LOCK", "*", async (c) => {
   if (depthHeader !== "0" && depthHeader !== "infinity")
     return c.text("Invalid Depth header", 400);
   const depth: LockDepth = depthHeader;
-  const token = c.req.header("if")?.match(/<([^>]+)>/)?.[1];
+  const ifHeader = c.req.header("if");
+  let token: string | undefined;
+  if (ifHeader) {
+    const parsed = parseIfHeader(ifHeader);
+    const firstCondition = parsed[0]?.conditions[0];
+    if (firstCondition?.kind === "state-token") token = firstCondition.token;
+  }
   const body = c.req.raw.body ? await c.req.text() : "";
   if (!body && !token) return c.text("Lock body is required", 400);
   if (body && !isValidXml(body)) return c.text("Invalid XML", 400);
@@ -357,6 +363,7 @@ rfc4918.on("LOCK", "*", async (c) => {
     const parentInfo = parent ? await parent.stat() : undefined;
     if (parentInfo?.kind !== "collection")
       return c.text("Parent directory not found", 409);
+    await resource.writeFile(new Uint8Array(0));
   }
   let lock;
   try {
@@ -380,15 +387,6 @@ rfc4918.on("LOCK", "*", async (c) => {
       token ? "Lock token does not match" : "Resource is locked",
       token ? 412 : 423,
     );
-  if (!existing && !token) {
-    await resource.writeFile(
-      new ReadableStream<Uint8Array>({
-        start(controller) {
-          controller.close();
-        },
-      }),
-    );
-  }
   return c.body(lockResponse(lock), existing ? 200 : 201, {
     "Content-Type": "application/xml; charset=utf-8",
     ...(token ? {} : { "Lock-Token": `<${lock.token}>` }),
