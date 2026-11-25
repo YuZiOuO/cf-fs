@@ -198,7 +198,7 @@ export class VirtualFileSystem implements IVirtualFileSystem {
       }
 
       const owner = crypto.randomUUID();
-      const lockIndexes = [src.parent.index, dst.parent.index].sort(
+      const lockIndexes = [...new Set([src.parent.index, dst.parent.index])].sort(
         (a, b) => a - b,
       );
       for (const idx of lockIndexes) {
