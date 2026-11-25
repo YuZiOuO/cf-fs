@@ -197,10 +197,11 @@ export class VirtualFileSystem implements IVirtualFileSystem {
         }
       }
 
+      const sameDir = src.parent.index === dst.parent.index;
       const owner = crypto.randomUUID();
-      const lockIndexes = [...new Set([src.parent.index, dst.parent.index])].sort(
-        (a, b) => a - b,
-      );
+      const lockIndexes = [
+        ...new Set([src.parent.index, dst.parent.index]),
+      ].sort((a, b) => a - b);
       for (const idx of lockIndexes) {
         await this.lock(idx, owner);
       }
@@ -208,22 +209,17 @@ export class VirtualFileSystem implements IVirtualFileSystem {
         const index = src.parent.namespaceOperations.lookup(src.name);
         if (index === null) throw new NotFoundError(from);
 
-        const existing = dst.parent.namespaceOperations.lookup(dst.name);
-        if (existing === index) {
-          src.parent.namespaceOperations.delete(src.name);
-          src.parent.modifiedTime = this.now();
-          await sb.writeInode(src.parent);
-          return;
-        }
+        const dstParent = sameDir ? src.parent : dst.parent;
+        const existing = dstParent.namespaceOperations.lookup(dst.name);
+        if (existing === index) return;
         if (existing !== null) throw new AlreadyExistsError(to);
 
-        dst.parent.namespaceOperations.create(dst.name, index);
-        dst.parent.modifiedTime = this.now();
-        await sb.writeInode(dst.parent);
-
+        dstParent.namespaceOperations.create(dst.name, index);
         src.parent.namespaceOperations.delete(src.name);
         src.parent.modifiedTime = this.now();
-        await sb.writeInode(src.parent);
+        dstParent.modifiedTime = this.now();
+        await sb.writeInode(dstParent);
+        if (!sameDir) await sb.writeInode(src.parent);
       } finally {
         for (const idx of lockIndexes.reverse()) {
           await this.unlock(idx, owner);

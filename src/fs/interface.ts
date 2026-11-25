@@ -48,6 +48,10 @@ export interface SuperBlock {
     kind: K,
     permission: Permission,
   ): Promise<Extract<Inode, { kind: K }>>;
+  /**
+   * Does **NOT** guarantee returning same object when calling with same InodeInde.
+   * This is by design because maintaining a consistent global inode map may be costly.
+   */
   getInode(i: InodeIndex): Promise<Inode>;
   writeInode(i: Inode): Promise<void>;
 }
